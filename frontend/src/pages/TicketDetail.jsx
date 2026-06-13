@@ -227,21 +227,23 @@ export default function TicketDetail() {
 
         {/* ── Col 2: Details Sidebar (2/8) ── */}
         <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-0.5">
-          {/* Status Actions */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Actions</h3>
-            <div className="space-y-2">
-              {(statusActions[ticket.status] || []).map((action) => (
-                <button
-                  key={action.value}
-                  onClick={() => handleStatusChange(action.value)}
-                  className={`w-full text-white text-sm font-medium py-2 px-4 rounded-lg transition ${action.color}`}
-                >
-                  {action.label}
-                </button>
-              ))}
+          {/* Status Actions (agents only) */}
+          {user.role === 'agent' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Actions</h3>
+              <div className="space-y-2">
+                {(statusActions[ticket.status] || []).map((action) => (
+                  <button
+                    key={action.value}
+                    onClick={() => handleStatusChange(action.value)}
+                    className={`w-full text-white text-sm font-medium py-2 px-4 rounded-lg transition ${action.color}`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Agent Assignment (agents only) */}
           {user.role === 'agent' && (

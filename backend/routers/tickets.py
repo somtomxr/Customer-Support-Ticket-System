@@ -262,9 +262,9 @@ def update_ticket_status(
     ticket_id: int,
     payload: TicketStatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(["agent"])),
 ):
-    """Update ticket status (Open → In Progress → Resolved)."""
+    """Update ticket status (Open → In Progress → Resolved) (agents only)."""
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
