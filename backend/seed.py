@@ -60,7 +60,7 @@ try:
             Ticket(
                 title="Dashboard charts not loading on Firefox",
                 description="The analytics dashboard charts are showing as blank white boxes on Firefox 120. Works fine on Chrome. Dev console shows 'Canvas rendering context error'. Attached screenshot in the comments.",
-                status="in_progress", priority="high",
+                status="in_progress", priority="medium",
                 customer_id=2, agent_id=4, category_id=2,
             ),
             Ticket(
@@ -78,7 +78,7 @@ try:
             Ticket(
                 title="API rate limit exceeded unexpectedly",
                 description="Our integration started hitting 429 errors today. We haven't changed our usage pattern and are well within the documented rate limits (100 req/min). The errors started around 2 PM IST. Our API key is XK-****-7892.",
-                status="in_progress", priority="high",
+                status="in_progress", priority="medium",
                 customer_id=2, agent_id=5, category_id=2,
             ),
             Ticket(
