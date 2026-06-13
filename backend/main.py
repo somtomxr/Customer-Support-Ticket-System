@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from database import engine, Base
-from routers import auth_routes, tickets, comments, categories, users, ai_suggest
+from routers import auth_routes, tickets, comments, categories, users, ai_suggest, similar_tickets
 
 load_dotenv()
 
@@ -39,6 +39,7 @@ app.include_router(comments.router)
 app.include_router(categories.router)
 app.include_router(users.router)
 app.include_router(ai_suggest.router)
+app.include_router(similar_tickets.router)
 
 
 @app.get("/", tags=["Root"])

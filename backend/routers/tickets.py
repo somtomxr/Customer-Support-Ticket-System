@@ -10,6 +10,7 @@ from schemas import (
     TicketStatusUpdate, TicketAssign, DashboardStats
 )
 from auth import get_current_user, require_role
+import similarity_engine
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
@@ -155,6 +156,8 @@ def create_ticket(
         .filter(Ticket.id == ticket.id)
         .first()
     )
+    # New ticket — no cached embedding yet, but invalidate defensively
+    similarity_engine.invalidate(ticket.id)
     return _serialize_ticket_detail(ticket)
 
 
@@ -249,6 +252,8 @@ def update_ticket(
         .filter(Ticket.id == ticket_id)
         .first()
     )
+    # Title/description may have changed — evict stale embedding from cache
+    similarity_engine.invalidate(ticket_id)
     return _serialize_ticket_detail(ticket)
 
 

@@ -150,3 +150,25 @@ class DashboardStats(BaseModel):
     in_progress_tickets: int
     resolved_tickets: int
     my_tickets: Optional[int] = None
+
+
+# ── Semantic Similarity Schemas ───────────────────────────────
+
+class SimilarTicketOut(BaseModel):
+    id: int
+    title: str
+    status: str
+    priority: str
+    similarity_score: float   # cosine similarity in [−1, 1]; practically [0, 1]
+    customer_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SimilarTicketsResponse(BaseModel):
+    results: List[SimilarTicketOut]
+    method: str  # "semantic" | "unavailable"
+    suggested_priority: Optional[str] = None    # weighted k-NN vote
+    priority_confidence: Optional[float] = None # fraction of vote weight [0,1]

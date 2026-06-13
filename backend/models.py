@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Index
+    Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Index, LargeBinary
 )
 from sqlalchemy.orm import relationship
 from database import Base
@@ -63,6 +63,9 @@ class Ticket(Base):
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # 384-dim float32 embedding stored as raw bytes (1.5 KB per ticket).
+    # NULL means not yet embedded — computed lazily and persisted on first access.
+    embedding = Column(LargeBinary, nullable=True)
 
     customer = relationship(
         "User", back_populates="tickets_created",

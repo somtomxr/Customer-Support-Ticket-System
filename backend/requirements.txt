@@ -8,3 +8,8 @@ python-dotenv>=1.0.0
 python-multipart>=0.0.6
 pydantic[email]>=2.5.0
 httpx>=0.25.0
+# ── ML: Semantic similarity search ───────────────────────────────────────────
+# sentence-transformers pulls in torch (CPU-only build is fine for this workload)
+# Upgrade path: add faiss-cpu>=1.7.4 for O(log n) ANN at 10k+ tickets (Redis-ready)
+sentence-transformers>=2.2.2
+numpy>=1.24.0

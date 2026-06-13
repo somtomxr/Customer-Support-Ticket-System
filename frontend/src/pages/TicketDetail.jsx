@@ -6,6 +6,7 @@ import {
   addComment, getAISuggestion, getAgents
 } from '../services/api'
 import { StatusBadge, PriorityBadge } from '../components/Badges'
+import SimilarTickets from '../components/SimilarTickets'
 import toast from 'react-hot-toast'
 import {
   HiOutlineArrowLeft, HiOutlineUser, HiOutlineClock,
@@ -111,7 +112,7 @@ export default function TicketDetail() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <button
         onClick={() => navigate('/dashboard')}
         className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 text-sm"
@@ -120,9 +121,10 @@ export default function TicketDetail() {
         Back to Dashboard
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+      {/* 3-column grid: main | details sidebar | similar tickets */}
+      <div className="grid grid-cols-1 lg:grid-cols-8 gap-5">
+        {/* ── Col 1: Main Content (4/8) ── */}
+        <div className="lg:col-span-4 space-y-6">
           {/* Ticket Header */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <div className="flex items-center gap-2 mb-3">
@@ -223,8 +225,8 @@ export default function TicketDetail() {
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
+        {/* ── Col 2: Details Sidebar (2/8) ── */}
+        <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-0.5">
           {/* Status Actions */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Actions</h3>
@@ -308,7 +310,16 @@ export default function TicketDetail() {
               )}
             </dl>
           </div>
-        </div>
+
+        </div>{/* end Col 2 */}
+
+        {/* ── Col 3: Similar Tickets (2/8) — agents only ── */}
+        {user.role === 'agent' && (
+          <div className="lg:col-span-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            <SimilarTickets ticketId={id} />
+          </div>
+        )}
+
       </div>
     </div>
   )
