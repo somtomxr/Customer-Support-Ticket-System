@@ -199,26 +199,28 @@ def suggest_priority(
     similar: list[tuple["Ticket", float]],
 ) -> tuple[str, float] | tuple[None, None]:
     """
-    Predict priority for a new ticket using weighted k-NN voting.
+    Predict priority for a new ticket using squared-weight k-NN voting.
 
-    Each similar ticket casts a vote for its own priority, weighted by its
-    cosine similarity score. The priority with the highest total weight wins.
+    Each similar ticket casts a vote for its own priority, weighted by the
+    SQUARE of its cosine similarity score.  Squaring amplifies the signal
+    from the closest neighbours and suppresses noise from distant, weakly-
+    similar tickets, improving discrimination between priority classes.
 
     Returns (priority_label, confidence_0_to_1) or (None, None) if no data.
 
     Example:
-        similar = [(ticket_urgent, 0.91), (ticket_high, 0.83), (ticket_low, 0.41)]
-        votes   = {urgent: 0.91, high: 0.83, low: 0.41}
-        winner  = urgent  (confidence = 0.91 / (0.91+0.83+0.41) = 0.42)
+        similar = [(ticket_urgent, 0.91), (ticket_medium, 0.83), (ticket_low, 0.41)]
+        weights = {urgent: 0.91²=0.828, medium: 0.83²=0.689, low: 0.41²=0.168}
+        winner  = urgent  (confidence = 0.828 / (0.828+0.689+0.168) = 0.49)
     """
     if not similar:
         return None, None
 
-    # Accumulate weighted votes per priority
+    # Accumulate squared-similarity votes per priority
     votes: dict[str, float] = {}
     for ticket, score in similar:
         p = ticket.priority
-        votes[p] = votes.get(p, 0.0) + score
+        votes[p] = votes.get(p, 0.0) + score ** 2   # ← squared weight
 
     total = sum(votes.values())
     if total == 0:

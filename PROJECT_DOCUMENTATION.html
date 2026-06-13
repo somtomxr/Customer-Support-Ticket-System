@@ -72,6 +72,12 @@
         /* Footer */
         .footer { text-align: center; padding: 3rem 0; color: var(--gray-500); font-size: 0.85rem; }
 
+        /* Q&A Blocks */
+        .qa-block { border: 1px solid var(--gray-200); border-radius: 10px; margin: 1.25rem 0; overflow: hidden; }
+        .qa-q { background: var(--primary-light); color: var(--primary-dark); padding: 0.75rem 1.25rem; font-weight: 700; font-size: 0.95rem; border-bottom: 1px solid #bfdbfe; }
+        .qa-a { padding: 1rem 1.25rem; background: white; font-size: 0.9rem; line-height: 1.75; border-left: 3px solid var(--primary); }
+        .qa-a pre { margin: 0.75rem 0; }
+
         @media (max-width: 768px) {
             .header h1 { font-size: 1.75rem; }
             section { padding: 1.5rem; }
@@ -120,6 +126,7 @@
         <li><a href="#deployment">Deployment Strategy</a></li>
         <li><a href="#use-cases">Real-World Use Cases</a></li>
         <li><a href="#future">Future Enhancements</a></li>
+        <li><a href="#interview">Interview Q&amp;A — Be Ready for Anything</a></li>
     </ol>
 </div>
 
@@ -638,6 +645,288 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
         <li><strong>SLA tracking</strong>: Monitor response and resolution time against SLA targets</li>
         <li><strong>Mobile app</strong>: React Native app consuming the same API</li>
     </ul>
+</section>
+
+<!-- ═══════════════════════════════════ SECTION 15: INTERVIEW Q&A ═══════════════════════════════════ -->
+<section id="interview">
+    <h2>15. Interview Q&amp;A — Be Ready for Anything</h2>
+
+    <div class="callout callout-info">
+        <strong>How to use this section</strong>
+        These are real questions interviewers ask about projects on a résumé. Read each answer, understand the reasoning, then try to say it in your own words without looking. The goal is confident, conversational answers — not memorization.
+    </div>
+
+    <!-- ── CATEGORY: Project Overview ── -->
+    <h3>📌 Project Overview &amp; Motivation</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Tell me about this project in 2 minutes.</div>
+        <div class="qa-a">
+            <strong>A:</strong> I built a full-stack Customer Support Ticket System — think a simplified version of Zendesk. Customers can log in, create support tickets, and track their status. Support agents get a centralized dashboard where they can see all tickets, assign them to themselves, update their status, and post replies. I also added an AI suggestion feature so agents can generate a draft reply with one click.
+            <br><br>
+            Tech stack: React + Tailwind on the frontend (deployed to Vercel), FastAPI + SQLAlchemy on the backend (deployed to Render), and SQLite locally / can use PostgreSQL in production. Authentication is JWT-based with bcrypt password hashing. The whole system has role-based access control — customers and agents see completely different UIs even though it's one app.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why did you build this specific project?</div>
+        <div class="qa-a">
+            <strong>A:</strong> I wanted one project that demonstrates everything a full-stack role requires: database design, REST API architecture, authentication, role-based authorization, state management in React, and cloud deployment. A ticketing system is perfect because it has a real-world business context — companies like Zendesk and Freshdesk make millions solving exactly this problem. It's also a project I can walk through end-to-end without needing a recruiter to imagine what it does.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Have you used this in production? Is it live?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Yes — the frontend is live on Vercel at <code>customer-support-ticket-system-lime.vercel.app</code> and the backend API is deployed on Render. The backend uses SQLite in the free tier deployment. If this were a real production system, I'd use Render's managed PostgreSQL or a hosted DB like Supabase, and add proper DB backups and monitoring.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Architecture ── -->
+    <h3>🏗️ Architecture &amp; Design</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why did you separate the frontend and backend? Why not a monolith?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Decoupled architecture gives three main advantages: <strong>independent deployment</strong> — I can push a frontend fix without restarting the backend; <strong>scalability</strong> — if the API gets heavy traffic, I can scale just the backend; and <strong>API reusability</strong> — if we later build a mobile app, it consumes the same FastAPI backend without any changes. The trade-off is more complexity in CORS configuration and separate deployment pipelines, but for any real-world SaaS product, this is the standard approach.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How did you design the database schema?</div>
+        <div class="qa-a">
+            <strong>A:</strong> I followed 3NF (Third Normal Form) normalization. There are four tables: <code>users</code>, <code>categories</code>, <code>tickets</code>, and <code>comments</code>. The key design decision was putting two foreign keys on the <code>tickets</code> table referencing <code>users</code> — one for <code>customer_id</code> (who created it) and one for <code>agent_id</code> (who's handling it). This models the real-world assignment workflow cleanly. I also added database indexes on <code>status</code>, <code>priority</code>, <code>customer_id</code>, and <code>agent_id</code> because those are the most-filtered columns on the dashboard query.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What is the ticket lifecycle? How do status transitions work?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Tickets follow <code>Open → In Progress → Resolved</code>, with the option to reopen a resolved ticket back to Open. I enforce this in the backend with a transition map:
+            <pre><code>valid_transitions = {
+    "open":        ["in_progress", "resolved"],
+    "in_progress": ["open", "resolved"],
+    "resolved":    ["open"],  # can reopen
+}</code></pre>
+            If the new status isn't in the allowed list, the API returns HTTP 400 with a clear error message. This prevents data inconsistencies — for example, you can't jump from <code>open</code> directly to <code>resolved</code> without the agent picking it up (though I do allow it for flexibility). The status change also auto-promotes a ticket to <code>in_progress</code> when an agent assigns it.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Tech Stack ── -->
+    <h3>⚙️ Tech Stack Decisions</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why FastAPI and not Flask or Django?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Three reasons. First, FastAPI gives you <strong>automatic Swagger UI</strong> at <code>/docs</code> — zero extra work for API documentation. Second, it uses <strong>Pydantic for request validation</strong>, so I define the schema once and get type checking, serialization, and auto-generated docs all from the same class. Third, FastAPI is <strong>async-capable</strong> (ASGI), so it's more performant than Flask (WSGI) for I/O-bound workloads like database queries. Django would have been overkill — it comes with an ORM, admin, templating engine, and auth system I'd be replacing anyway.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why SQLAlchemy? Why not raw SQL or another ORM?</div>
+        <div class="qa-a">
+            <strong>A:</strong> SQLAlchemy is Python's most mature ORM and abstracts the database engine, so my code runs on both SQLite (development) and PostgreSQL (production) with only a connection-string change. The most important feature I used was <code>joinedload</code> to solve the N+1 query problem — without it, loading 20 tickets with customer names and agent names would fire 41 separate SQL queries. With <code>joinedload</code>, it's a single JOIN query.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why React? Why not plain HTML/JS or Vue?</div>
+        <div class="qa-a">
+            <strong>A:</strong> The dashboard has dynamic state — filters, live ticket updates, role-based conditional rendering, and form state management. React's component model and virtual DOM make managing this complexity clean and predictable. Context API handles global auth state without needing Redux for an app of this size. React also has the largest ecosystem and is the most-asked-for skill in frontend job listings, so it was the logical choice for a portfolio project.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why Vite instead of Create React App?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Vite's dev server starts in under a second and uses native ES modules, giving instant Hot Module Replacement. Create React App uses Webpack, which has 30–60 second cold starts on larger projects. For development productivity, Vite is simply better. CRA is also no longer actively maintained by the React team.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Auth & Security ── -->
+    <h3>🔐 Authentication &amp; Security</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How does JWT authentication work in your system?</div>
+        <div class="qa-a">
+            <strong>A:</strong> When a user logs in, the backend verifies their credentials, then issues a signed JWT token containing the user's ID, role, and expiry time. The frontend stores this token in <code>localStorage</code> and attaches it to every API request via an Axios interceptor in the <code>Authorization: Bearer &lt;token&gt;</code> header. On each protected endpoint, FastAPI's <code>get_current_user</code> dependency decodes and verifies the token. If it's expired or invalid, the API returns 401, and the Axios interceptor clears the stored token and redirects the user to the login page.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why JWT instead of session-based auth?</div>
+        <div class="qa-a">
+            <strong>A:</strong> JWT is <strong>stateless</strong> — the server doesn't store session data in memory or a database. This is important for scalability: if I had multiple backend instances behind a load balancer, session-based auth would require a shared session store (like Redis). With JWT, any instance can verify the token by checking the cryptographic signature. The trade-off is that JWTs can't be invalidated before expiry — but I mitigated this by setting a short 60-minute expiry.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Is storing JWT in localStorage safe?</div>
+        <div class="qa-a">
+            <strong>A:</strong> This is a legitimate security question. <code>localStorage</code> is vulnerable to XSS attacks — if an attacker injects malicious JavaScript, they can read the token. The more secure alternative is storing the JWT in an <code>HttpOnly</code> cookie, which JavaScript can't access. For this project, <code>localStorage</code> was acceptable because: (1) it's a demo/portfolio project without real sensitive data, (2) the API validates tokens on every request, and (3) the CORS policy restricts which origins can call the API. In a real production app, I'd use <code>HttpOnly</code> cookies.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How does role-based access work?</div>
+        <div class="qa-a">
+            <strong>A:</strong> There are two roles: <code>customer</code> and <code>agent</code>. Enforcement happens at two levels. At the <strong>API level</strong>, I use a <code>require_role()</code> dependency factory — endpoints like "assign ticket" or "AI suggest" only accept requests from users with the <code>agent</code> role; otherwise they return HTTP 403. At the <strong>data level</strong>, customers can only query their own tickets — the <code>list_tickets</code> endpoint filters by <code>customer_id == current_user.id</code> for non-agents. Frontend-side, the <code>user.role</code> from AuthContext conditionally shows/hides UI elements, but I never rely solely on the frontend for security.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How are passwords stored?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Passwords are hashed using <code>bcrypt</code> before being stored. bcrypt is an adaptive hashing algorithm — it has a configurable "work factor" that makes it intentionally slow to compute, which protects against brute-force attacks. Even if the database is compromised, the attacker can't reverse the hash. Plaintext passwords are never logged or stored anywhere in the system.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Performance ── -->
+    <h3>⚡ Performance &amp; Scalability</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What is the N+1 query problem and how did you solve it?</div>
+        <div class="qa-a">
+            <strong>A:</strong> The N+1 problem occurs when you run 1 query to fetch a list, then N additional queries to fetch related data for each item. For example, loading 20 tickets and then querying the customer name for each ticket = 21 queries. I solved this using SQLAlchemy's <code>joinedload()</code>:
+            <pre><code>db.query(Ticket).options(
+    joinedload(Ticket.customer),
+    joinedload(Ticket.agent),
+    joinedload(Ticket.category),
+)</code></pre>
+            This generates a single SQL query with JOINs. The dashboard load time went from ~800ms to ~50ms as a result.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How does pagination work?</div>
+        <div class="qa-a">
+            <strong>A:</strong> The <code>GET /api/tickets/</code> endpoint accepts <code>page</code> and <code>limit</code> query parameters. Pagination is implemented with SQL <code>OFFSET</code> and <code>LIMIT</code>:
+            <pre><code>query.offset((page - 1) * limit).limit(limit).all()</code></pre>
+            The default is 20 tickets per page with a maximum of 100. This prevents loading thousands of rows into memory on a large dataset. The frontend sends <code>?page=1&amp;limit=20</code> and can request the next page by incrementing the page number.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What database indexes did you add and why?</div>
+        <div class="qa-a">
+            <strong>A:</strong> I indexed <code>status</code>, <code>priority</code>, <code>customer_id</code>, and <code>agent_id</code> on the tickets table. These are the columns used in the most common WHERE clauses: "show all open tickets", "show my assigned tickets", "filter by priority". Without indexes, each of these would require a full table scan. With indexes, the database can look up matching rows in O(log n) time using a B-tree structure. Email on users is also indexed for fast login lookups.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: AI Feature ── -->
+    <h3>🤖 AI Feature</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Tell me about the AI reply suggestion feature.</div>
+        <div class="qa-a">
+            <strong>A:</strong> When an agent is viewing a ticket, they can click "Suggest Reply" which calls <code>POST /api/ai/suggest-reply</code>. The system works in two modes. By default it uses a <strong>template-based system</strong> — it looks at the ticket's category (billing, technical, account, general) and returns a contextually appropriate pre-written response, randomized from a pool to avoid repetition. If an <code>OPENAI_API_KEY</code> is configured as an environment variable, it switches to <strong>GPT-3.5-turbo</strong> — it constructs a prompt with the ticket title, description, category, priority, and recent comments, then calls the OpenAI API. If the OpenAI call fails for any reason (rate limit, network error), it silently falls back to templates, so the feature always works.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: Why template-based and not always OpenAI?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Cost and reliability. OpenAI API calls cost money and have rate limits. For a demo or small deployment, templates provide instant, free suggestions that work offline. It also makes the project deployable without needing anyone to have or pay for an API key. The system is designed so upgrading to real AI is just adding an environment variable — no code changes needed.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Deployment ── -->
+    <h3>🚀 Deployment</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How did you deploy this project?</div>
+        <div class="qa-a">
+            <strong>A:</strong> The frontend is deployed on <strong>Vercel</strong> — I connected my GitHub repo, set the root directory to <code>frontend/</code>, added the <code>VITE_API_URL</code> environment variable pointing to my Render backend, and Vercel handles build, CDN distribution, and HTTPS automatically on every git push. The backend is deployed on <strong>Render</strong> — I configured a Web Service with root directory <code>backend/</code>, build command <code>pip install -r requirements.txt</code>, and start command <code>uvicorn main:app --host 0.0.0.0 --port $PORT</code>. Environment variables (SECRET_KEY, DATABASE_URL, FRONTEND_URL) are set in Render's dashboard, never committed to git.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How does the frontend talk to the backend across different domains?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Through CORS (Cross-Origin Resource Sharing). The FastAPI backend has CORS middleware configured with the Vercel frontend URL as an allowed origin. Without this, the browser would block requests from <code>vercel.app</code> to <code>render.com</code> for security reasons. The <code>FRONTEND_URL</code> environment variable is comma-separated, so I can allow both the Vercel URL and localhost for development without code changes.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What environment variables does this project use and why aren't they in git?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Key variables: <code>SECRET_KEY</code> (signs JWTs — if leaked, anyone can forge tokens), <code>DATABASE_URL</code> (database credentials), <code>FRONTEND_URL</code> (CORS allowed origin), and optionally <code>OPENAI_API_KEY</code>. These are never committed to git because they contain secrets. The repo has a <code>.env.example</code> file showing which variables are needed but with placeholder values. On Render and Vercel, these are set through the platform's secure environment variable UI and injected at build/runtime.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Code Quality ── -->
+    <h3>🧹 Code Quality &amp; Patterns</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How did you organize the backend code?</div>
+        <div class="qa-a">
+            <strong>A:</strong> I used the <strong>modular router pattern</strong> — each domain has its own file: <code>auth_routes.py</code>, <code>tickets.py</code>, <code>comments.py</code>, <code>categories.py</code>, <code>users.py</code>, <code>ai_suggest.py</code>. <code>main.py</code> is just the app initialization and router registration — about 56 lines. This keeps each file focused and under 200 lines, making it easy to navigate and test. Pydantic schemas are all centralized in <code>schemas.py</code> so input/output contracts are in one place.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How did you handle errors in the API?</div>
+        <div class="qa-a">
+            <strong>A:</strong> FastAPI handles validation errors automatically — if a request body doesn't match the Pydantic schema, it returns a structured 422 response. For business logic errors, I raise <code>HTTPException</code> with appropriate status codes: 404 for "ticket not found", 403 for "access denied", 400 for "invalid status transition", 401 for auth failures. This makes the API predictable for the frontend — it always receives a JSON error response with a <code>detail</code> field.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What is the <code>get_db</code> dependency and why use it?</div>
+        <div class="qa-a">
+            <strong>A:</strong> <code>get_db</code> is a FastAPI dependency that creates a new SQLAlchemy database session for each request and closes it afterward, even if an exception occurs:
+            <pre><code>def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()</code></pre>
+            This is the dependency injection pattern. Instead of creating sessions manually in each endpoint, I declare <code>db: Session = Depends(get_db)</code> and FastAPI handles the session lifecycle. It prevents connection leaks and keeps endpoint code clean.
+        </div>
+    </div>
+
+    <!-- ── CATEGORY: Behavioral / HR ── -->
+    <h3>💬 Behavioral / HR Questions</h3>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What was the hardest part of building this project?</div>
+        <div class="qa-a">
+            <strong>A:</strong> The trickiest part was getting the authentication flow completely right between the frontend and backend. The JWT token needs to be attached to every API request, but it also needs to be validated on startup (so the user stays logged in on page refresh) and cleared on expiry (so stale tokens don't cause silent failures). I solved this with two things: an Axios interceptor that auto-attaches the token to every request header, and an AuthContext that on app load calls <code>GET /api/auth/me</code> — if it returns 401, the stored token is invalid and the user is sent to the login page.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What would you do differently if you built this again?</div>
+        <div class="qa-a">
+            <strong>A:</strong> A few things. First, I'd store the JWT in an <code>HttpOnly</code> cookie instead of localStorage for better XSS protection. Second, I'd add a proper test suite — at minimum, pytest integration tests for each API endpoint. Third, I'd use Alembic for database migrations instead of <code>create_all()</code> on startup, so schema changes in production are tracked and reversible. Fourth, I'd add WebSocket support for real-time comment updates so the agent doesn't need to refresh the page to see new customer replies.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How long did this project take you?</div>
+        <div class="qa-a">
+            <strong>A:</strong> I built this as a learning exercise over a few days. The backend took the most time to design correctly — I wanted the schema and API contracts to be solid before building the frontend on top of them. The frontend was faster because once the API was defined, the React components were mostly data-fetching + rendering. Deployment was surprisingly smooth because both Vercel and Render have good defaults for this stack.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: How does this project compare to Zendesk or Freshdesk?</div>
+        <div class="qa-a">
+            <strong>A:</strong> It's a much simpler version — Zendesk has email ingestion, SLA tracking, knowledge bases, macros, integrations with 1000+ tools, and handles millions of tickets. What my project demonstrates is the <em>core domain model</em> and architecture that underpins those systems: ticket lifecycle management, role-based access, assignment workflows, threaded comments, and AI-assisted replies. Building this gave me an appreciation for the engineering complexity those products hide from end users.
+        </div>
+    </div>
+
+    <div class="qa-block">
+        <div class="qa-q">Q: What would you add to make this production-ready for a real company?</div>
+        <div class="qa-a">
+            <strong>A:</strong> Several things: <strong>Email notifications</strong> (notify customer when status changes via SendGrid), <strong>file attachments</strong> (let customers upload screenshots stored in S3), <strong>rate limiting</strong> on the API (prevent abuse), <strong>proper logging &amp; monitoring</strong> (structured logs + Sentry for errors), <strong>database migrations</strong> (Alembic), <strong>automated tests</strong> (pytest + React Testing Library), <strong>CI/CD pipeline</strong> (GitHub Actions to run tests before deploy), and <strong>an admin role</strong> to manage agents and view system-wide analytics.
+        </div>
+    </div>
+
+    <div class="callout callout-success">
+        <strong>💡 Pro Tip for Interviews</strong>
+        Always tie your answers back to business value. Instead of just saying "I used JWT" — say "I used JWT so the API is stateless and can scale horizontally without a shared session store." Interviewers want to see that you understand <em>why</em>, not just <em>what</em>.
+    </div>
 </section>
 
 </div><!-- .container -->
