@@ -11,6 +11,10 @@ load_dotenv()
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
 
+# Pre-warm the semantic similarity engine (downloads & loads ONNX model weights on boot)
+import similarity_engine
+similarity_engine.is_available()
+
 app = FastAPI(
     title="Customer Support Ticket System",
     description="A full-stack support ticketing platform with role-based access, "

@@ -33,8 +33,11 @@ logger = logging.getLogger(__name__)
 
 # ── Model loading ──────────────────────────────────────────────────────────────
 
+import threading
+
 _model = None          # fastembed TextEmbedding instance (loaded once)
 _available = None      # bool | None  (None = not yet checked)
+_model_lock = threading.Lock()
 
 # In-memory cache: ticket_id → 384-dim float32 ndarray
 # Acts as L1 cache in front of the DB BLOB column (L2).
@@ -42,29 +45,34 @@ _embedding_cache: dict[int, np.ndarray] = {}
 
 
 def _get_model():
-    """Load the model exactly once (lazy singleton). Thread-safe for read-only use."""
+    """Load the model exactly once (lazy singleton). Thread-safe using lock."""
     global _model, _available
     if _available is not None:
         return _model  # already resolved
 
-    try:
-        from fastembed import TextEmbedding
-        logger.info("Loading fastembed model: all-MiniLM-L6-v2 (ONNX, no PyTorch) …")
-        _model = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
-        _available = True
-        logger.info("Embedding model loaded ✓")
-    except ImportError:
-        logger.warning(
-            "fastembed not installed. "
-            "Semantic search will be unavailable. "
-            "Run: pip install fastembed"
-        )
-        _available = False
-    except Exception as exc:
-        logger.error("Failed to load embedding model: %s", exc)
-        _available = False
+    with _model_lock:
+        # Double-check inside lock
+        if _available is not None:
+            return _model
 
-    return _model
+        try:
+            from fastembed import TextEmbedding
+            logger.info("Loading fastembed model: all-MiniLM-L6-v2 (ONNX, no PyTorch) …")
+            _model = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
+            _available = True
+            logger.info("Embedding model loaded ✓")
+        except ImportError:
+            logger.warning(
+                "fastembed not installed. "
+                "Semantic search will be unavailable. "
+                "Run: pip install fastembed"
+            )
+            _available = False
+        except Exception as exc:
+            logger.error("Failed to load embedding model: %s", exc)
+            _available = False
+
+        return _model
 
 
 def is_available() -> bool:
