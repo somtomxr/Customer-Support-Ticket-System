@@ -1,12 +1,12 @@
 # Customer Support Ticket System
 
-A full-stack customer support ticketing platform with role-based access control, ticket lifecycle management, AI reply suggestions, and **ML-powered semantic ticket search** using sentence-transformers.
+A full-stack customer support ticketing platform with role-based access control, ticket lifecycle management, AI reply suggestions, and **ML-powered semantic ticket search** using fastembed.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?logo=fastapi)
 ![SQLite](https://img.shields.io/badge/Database-SQLite%20%7C%20PostgreSQL-4169E1?logo=postgresql)
-![ML](https://img.shields.io/badge/ML-sentence--transformers-orange?logo=pytorch)
+![ML](https://img.shields.io/badge/ML-fastembed%20%7C%20ONNX-orange?logo=onnx)
 
 ---
 
@@ -34,7 +34,7 @@ A full-stack customer support ticketing platform with role-based access control,
 New Ticket Text
       │
       ▼
-sentence-transformers (all-MiniLM-L6-v2)  ← 22MB, runs offline, no API key
+fastembed (all-MiniLM-L6-v2 via ONNX)  ← ~100MB runtime, runs offline, no API key
       │  encodes title + description → 384-dimensional float32 vector
       ▼
 cosine_similarity(new_vec, all_ticket_vecs)   ← NumPy dot product
@@ -53,7 +53,7 @@ Top-K most similar tickets  +  weighted k-NN priority prediction
 
 ### Implementation details
 
-- **Model**: `all-MiniLM-L6-v2` — 384-dim embeddings, fast CPU inference
+- **Model**: `all-MiniLM-L6-v2` via `fastembed` — 384-dim embeddings, ONNX runtime for ultra-fast CPU inference with very low memory footprint
 - **Search**: Brute-force NumPy cosine similarity — O(n), suitable for <10k tickets
 - **Caching**: 3-level strategy:
   - L1: In-memory Python dict (instant)
@@ -83,7 +83,7 @@ Top-K most similar tickets  +  weighted k-NN priority prediction
 | Backend | Python, FastAPI, SQLAlchemy ORM, Pydantic |
 | Database | SQLite (dev) / PostgreSQL (prod) |
 | Auth | JWT (python-jose), bcrypt (passlib) |
-| ML | sentence-transformers, PyTorch (CPU), NumPy |
+| ML | fastembed, ONNX Runtime, NumPy |
 | Deployment | Vercel (frontend), Render (backend) |
 
 ---
@@ -149,7 +149,7 @@ python -m venv venv
 source venv/bin/activate      # macOS/Linux
 # venv\Scripts\activate       # Windows
 
-# Install dependencies (includes sentence-transformers + torch CPU)
+# Install dependencies (includes fastembed and other requirements)
 pip install -r requirements.txt
 
 # Configure environment
@@ -165,7 +165,7 @@ python rich_seed.py
 uvicorn main:app --reload --port 8000
 ```
 
-> **First ML request**: The sentence-transformer model (~22MB) is downloaded and cached on the first `/similar` request. Subsequent requests are fast (<100ms).
+> **First ML request**: The fastembed model (all-MiniLM-L6-v2 ONNX weights, ~100MB) is downloaded and cached locally on the first `/similar` request. Subsequent requests are extremely fast (<20ms).
 
 API docs: http://localhost:8000/docs
 
@@ -272,10 +272,7 @@ created_at         agent_id (FK)
 3. Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. Add env vars from `.env.example`
 
-> **Note on ML + Render free tier**: sentence-transformers + PyTorch adds ~800MB to the container. Render's free tier (512MB RAM) will struggle. Upgrade to the $7/mo Starter plan, or use a CPU-only torch wheel to reduce footprint:
-> ```
-> pip install torch --index-url https://download.pytorch.org/whl/cpu
-> ```
+> **Render Free Tier Compatibility**: Swapped out `sentence-transformers` and heavy PyTorch (~800MB memory footprint) for `fastembed` (ONNX Runtime, ~150MB memory footprint). This allows the backend API to run comfortably within the 512MB RAM limit on Render's free tier. No heavy PyTorch installation required!
 
 ---
 
