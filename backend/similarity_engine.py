@@ -3,7 +3,7 @@ similarity_engine.py
 ====================
 Singleton embedding engine for semantic ticket search.
 
-Design decisions (interview-ready):
+Architecture Design Decisions:
 - Model: all-MiniLM-L6-v2 via fastembed (ONNX runtime, ~150MB RAM, no PyTorch)
   Identical 384-dim embeddings to sentence-transformers but fits free-tier hosting.
 - Search: brute-force NumPy cosine similarity — O(n), fine for <10k tickets
@@ -12,7 +12,7 @@ Design decisions (interview-ready):
 - Invalidation: call invalidate(ticket_id) on ticket create/update to keep
   cache coherent — prevents stale embeddings being served after edits
 
-Upgrade path (not implemented here):
+Scale & Optimization Paths:
 - Swap NumPy cosine loop for faiss.IndexFlatIP for O(log n) ANN at 10k+ tickets
 - Replace in-memory cache with Redis HSET for multi-worker deployments
 """

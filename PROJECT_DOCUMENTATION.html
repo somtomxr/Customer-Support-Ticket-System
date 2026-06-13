@@ -126,7 +126,7 @@
         <li><a href="#deployment">Deployment Strategy</a></li>
         <li><a href="#use-cases">Real-World Use Cases</a></li>
         <li><a href="#future">Future Enhancements</a></li>
-        <li><a href="#interview">Interview Q&amp;A — Be Ready for Anything</a></li>
+        <li><a href="#interview">Technical Architecture FAQ</a></li>
     </ol>
 </div>
 
@@ -647,13 +647,13 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
     </ul>
 </section>
 
-<!-- ═══════════════════════════════════ SECTION 15: INTERVIEW Q&A ═══════════════════════════════════ -->
+<!-- ═══════════════════════════════════ SECTION 15: TECHNICAL FAQ ═══════════════════════════════════ -->
 <section id="interview">
-    <h2>15. Interview Q&amp;A — Be Ready for Anything</h2>
+    <h2>15. Technical Architecture FAQ</h2>
 
     <div class="callout callout-info">
-        <strong>How to use this section</strong>
-        These are real questions interviewers ask about projects on a résumé. Read each answer, understand the reasoning, then try to say it in your own words without looking. The goal is confident, conversational answers — not memorization.
+        <strong>Architecture Notes</strong>
+        This section compiles system design decisions, architecture details, and answers to common technical queries regarding the implementation of the ticketing system.
     </div>
 
     <!-- ── CATEGORY: Project Overview ── -->
@@ -671,7 +671,7 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
     <div class="qa-block">
         <div class="qa-q">Q: Why did you build this specific project?</div>
         <div class="qa-a">
-            <strong>A:</strong> I wanted one project that demonstrates everything a full-stack role requires: database design, REST API architecture, authentication, role-based authorization, state management in React, and cloud deployment. A ticketing system is perfect because it has a real-world business context — companies like Zendesk and Freshdesk make millions solving exactly this problem. It's also a project I can walk through end-to-end without needing a recruiter to imagine what it does.
+            <strong>A:</strong> I wanted one project that demonstrates everything a full-stack role requires: database design, REST API architecture, authentication, role-based authorization, state management in React, and cloud deployment. A ticketing system is perfect because it has a real-world business context — companies like Zendesk and Freshdesk make millions solving exactly this problem. It is a complete, deployable demonstration of clean REST APIs and database patterns.
         </div>
     </div>
 
@@ -924,8 +924,8 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
     </div>
 
     <div class="callout callout-success">
-        <strong>💡 Pro Tip for Interviews</strong>
-        Always tie your answers back to business value. Instead of just saying "I used JWT" — say "I used JWT so the API is stateless and can scale horizontally without a shared session store." Interviewers want to see that you understand <em>why</em>, not just <em>what</em>.
+        <strong>💡 Architecture Best Practice</strong>
+        Stateless authentication (JWT) is chosen here so that the REST API can scale horizontally across multiple instances without a shared session store, keeping database queries focused on ticketing operations.
     </div>
 </section>
 

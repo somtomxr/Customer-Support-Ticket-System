@@ -62,7 +62,7 @@ Top-K most similar tickets  +  weighted k-NN priority prediction
 - **Cache coherence**: `invalidate(ticket_id)` called on ticket create/update
 - **Security**: Customers only match against their own tickets; agents see all
 - **Priority prediction**: k-NN weighted vote on top-5 similar tickets' priorities
-- **Upgrade path**: Drop-in FAISS for O(log n) ANN at 10k+ tickets; Redis for multi-worker cache
+- **Scale & Optimization Paths**: FAISS for O(log n) ANN at 10k+ tickets; Redis for multi-worker cache
 
 ### Key files
 
@@ -301,9 +301,9 @@ created_at         agent_id (FK)
 
 ---
 
-## Interview Q&A
+## Technical Architecture FAQ
 
-Common questions you can now answer confidently:
+Key design details and implementation notes:
 
 **Q: What is an embedding?**
 > A dense numerical vector (384 floats here) that represents the semantic meaning of text. Two texts with similar meaning have embeddings that point in nearly the same direction in vector space.
