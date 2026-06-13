@@ -75,6 +75,31 @@ Top-K most similar tickets  +  weighted k-NN priority prediction
 
 ---
 
+## 📊 Model Evaluation & Tuning
+
+To evaluate our priority suggestion accuracy, we built a comprehensive Jupyter evaluation notebook: [backend/evaluation.ipynb](file:///Users/somtomar/WORK/customer-support-ticket-system/backend/evaluation.ipynb).
+
+### 📈 Evaluation Results (k=5)
+
+| Model | Accuracy | Weighted F1 | Notes |
+|---|---|---|---|
+| **Majority-Class Baseline** | 39.1% | 0.220 | Always predicts `medium` |
+| **Semantic k-NN (all-MiniLM-L6-v2, ONNX)** | **69.6%** ✅ | **0.687** ✅ | **+78% improvement** over baseline · avg confidence 67.9% |
+
+*Test set: 23 tickets (stratified 20% holdout from 120 synthetic tickets). Training set: 97 tickets. Seed: 42.*
+
+### ⚙️ Hyperparameter Tuning (k Sweep)
+
+To find the optimal number of neighbors ($k$), we swept $k=1$ through $10$ in the notebook. $k=5$ yields the highest accuracy before neighborhood pollution from the majority class (`medium`) sets in:
+
+![k-NN Tuning Sweep](backend/k_tuning_results.png)
+
+* **Low k (1-2)**: Susceptible to local noise and outlier tickets.
+* **Optimal k (5)**: Capture semantic clusters accurately without neighborhood pollution.
+* **High k (6-10)**: Neighbor quality degrades, bringing in unrelated tickets from the majority class (`medium`), pushing performance back toward the baseline.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
