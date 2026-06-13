@@ -17,4 +17,4 @@ services:
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: 60
       - key: FRONTEND_URL
-        value: https://your-app.vercel.app   # ← update after Vercel deploy
+        value: https://customer-support-ticket-system-lime.vercel.app   # ← update after Vercel deploy
