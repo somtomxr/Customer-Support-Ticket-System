@@ -2,10 +2,13 @@ services:
   - type: web
     name: supportdesk-api
     region: oregon
-    plan: free
-    env: python          # ← CHANGED from 'runtime' to 'env'
+    plan: starter          # free tier has 512MB RAM — sentence-transformers needs ~800MB
+    env: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt && python seed.py
+    buildCommand: >
+      pip install torch --index-url https://download.pytorch.org/whl/cpu &&
+      pip install -r requirements.txt &&
+      python rich_seed.py
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
