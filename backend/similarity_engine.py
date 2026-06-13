@@ -4,7 +4,8 @@ similarity_engine.py
 Singleton embedding engine for semantic ticket search.
 
 Design decisions (interview-ready):
-- Model: all-MiniLM-L6-v2 (22 MB, 384-dim, CPU-friendly, no API key)
+- Model: all-MiniLM-L6-v2 via fastembed (ONNX runtime, ~150MB RAM, no PyTorch)
+  Identical 384-dim embeddings to sentence-transformers but fits free-tier hosting.
 - Search: brute-force NumPy cosine similarity — O(n), fine for <10k tickets
 - Cache: in-memory dict {ticket_id → ndarray}; also persisted to DB BLOB column
   so cold-start skips recomputation (Redis-ready interface for production)
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # ── Model loading ──────────────────────────────────────────────────────────────
 
-_model = None          # SentenceTransformer instance (loaded once)
+_model = None          # fastembed TextEmbedding instance (loaded once)
 _available = None      # bool | None  (None = not yet checked)
 
 # In-memory cache: ticket_id → 384-dim float32 ndarray
@@ -47,16 +48,16 @@ def _get_model():
         return _model  # already resolved
 
     try:
-        from sentence_transformers import SentenceTransformer
-        logger.info("Loading sentence-transformer model: all-MiniLM-L6-v2 …")
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        from fastembed import TextEmbedding
+        logger.info("Loading fastembed model: all-MiniLM-L6-v2 (ONNX, no PyTorch) …")
+        _model = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
         _available = True
         logger.info("Embedding model loaded ✓")
     except ImportError:
         logger.warning(
-            "sentence-transformers not installed. "
+            "fastembed not installed. "
             "Semantic search will be unavailable. "
-            "Run: pip install sentence-transformers"
+            "Run: pip install fastembed"
         )
         _available = False
     except Exception as exc:
@@ -113,9 +114,9 @@ def _get_or_compute_embedding(ticket: "Ticket", db: "Session") -> Optional[np.nd
         _embedding_cache[ticket.id] = emb
         return emb
 
-    # L3: compute fresh
+    # L3: compute fresh via fastembed (returns a generator of np.ndarray)
     text = _ticket_text(ticket)
-    emb = model.encode(text, convert_to_numpy=True).astype(np.float32)
+    emb = next(iter(model.embed([text]))).astype(np.float32)
 
     # Persist to DB
     ticket.embedding = _ndarray_to_bytes(emb)
