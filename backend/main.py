@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,42 +16,57 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
+def _background_prewarm() -> None:
+    """
+    Pre-warm all ticket embeddings in a background thread.
+
+    Runs after the server is already accepting requests, so:
+      - Render marks the deploy as 'Live' immediately (no 50s wait)
+      - Embeddings are fully cached within ~30-40 seconds of boot
+      - Any /similar request that arrives before prewarm finishes falls back
+        to on-demand encoding for that one ticket only (still much faster
+        than the old 60s wait for all 120 tickets at once)
+    """
+    db = SessionLocal()
+    try:
+        logger.info("Background pre-warm started …")
+        similarity_engine.prewarm_all(db)
+        logger.info("Background pre-warm complete — all embeddings cached.")
+    except Exception as exc:
+        logger.error("Background pre-warm failed (non-fatal): %s", exc)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    FastAPI lifespan handler — runs once at startup before any request is served.
+    FastAPI lifespan handler — runs once on startup.
 
     Startup sequence:
-      1. Create DB tables (idempotent, safe to run every boot)
-      2. Load the fastembed ONNX model into RAM (~10-15 sec on cold start)
-      3. Pre-warm ALL ticket embeddings so the first /similar request is instant
-         instead of making the first user wait 60+ seconds for on-demand encoding.
-
-    Without step 3, a cold-started server encodes 120+ tickets one-by-one on the
-    first /similar call — this moves that cost to startup where no user sees it.
+      1. Create DB tables (safe to run on every boot)
+      2. Load the fastembed ONNX model into RAM (~10-15 sec)
+      3. Kick off embedding pre-warm in a background thread
+      4. yield → server opens port immediately, Render marks deploy 'Live'
+      5. Background thread finishes caching all embeddings within ~30-40 sec
     """
-    # Step 1: ensure all DB tables exist
+    # Step 1: ensure DB schema is up to date
     Base.metadata.create_all(bind=engine)
 
-    # Step 2: load the AI model (blocks until model weights are in RAM)
+    # Step 2: load model weights synchronously (must finish before serving)
     logger.info("Loading embedding model …")
     similarity_engine.is_available()
+    logger.info("Embedding model ready.")
 
-    # Step 3: pre-warm all embeddings — server is ready only after this finishes
+    # Step 3: launch pre-warm as a daemon thread so it doesn't block startup
     if similarity_engine.is_available():
-        db = SessionLocal()
-        try:
-            logger.info("Starting embedding pre-warm …")
-            similarity_engine.prewarm_all(db)
-        except Exception as exc:
-            # Never crash the server over pre-warming — log and move on
-            logger.error("Embedding pre-warm failed (non-fatal): %s", exc)
-        finally:
-            db.close()
+        t = threading.Thread(target=_background_prewarm, daemon=True, name="prewarm")
+        t.start()
     else:
         logger.warning("Embedding model not available — pre-warm skipped.")
 
-    logger.info("Server startup complete — ready to serve requests.")
+    # Step 4: open the port — Render marks deploy 'Live' here
+    logger.info("Server ready — accepting requests (pre-warm running in background).")
     yield
     # (nothing to clean up on shutdown)
 
