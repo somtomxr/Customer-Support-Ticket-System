@@ -145,6 +145,56 @@ def invalidate(ticket_id: int) -> None:
     _embedding_cache.pop(ticket_id, None)
 
 
+def prewarm_all(db: "Session") -> None:
+    """
+    Pre-compute and cache embeddings for every ticket in the database.
+
+    Called once at server startup so the in-memory cache is fully populated
+    before any user request arrives.  Without this, the first call to
+    find_similar() on a cold-started server blocks for 60+ seconds while
+    it encodes all 120+ tickets one by one.
+
+    After this runs, every subsequent find_similar() call hits only the
+    in-memory cache and completes in milliseconds.
+    """
+    if not is_available():
+        logger.warning("Embedding model unavailable — skipping pre-warm.")
+        return
+
+    from models import Ticket  # local import to avoid circular dependency at module level
+
+    tickets = db.query(Ticket).all()
+    total = len(tickets)
+    if total == 0:
+        logger.info("No tickets in DB — nothing to pre-warm.")
+        return
+
+    logger.info("Pre-warming embeddings for %d tickets …", total)
+    cached = 0
+    computed = 0
+
+    for ticket in tickets:
+        already_in_memory = ticket.id in _embedding_cache
+        already_in_db = ticket.embedding is not None
+
+        if already_in_memory:
+            cached += 1
+            continue  # already warm, skip
+
+        # This call populates both the in-memory cache and the DB BLOB if missing
+        _get_or_compute_embedding(ticket, db)
+
+        if already_in_db:
+            cached += 1   # loaded from DB blob (fast)
+        else:
+            computed += 1  # freshly encoded by model (slow, but done once)
+
+    logger.info(
+        "Pre-warm complete: %d from DB cache, %d freshly computed, %d total.",
+        cached, computed, total,
+    )
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def find_similar(
