@@ -1,4 +1,4 @@
-"""API integration test for Customer Support Ticket System."""
+"""API integration test for Semantic Ticket Retrieval & Priority Prediction System."""
 import httpx
 import sys
 

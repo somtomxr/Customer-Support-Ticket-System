@@ -72,10 +72,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Customer Support Ticket System",
+    title="Semantic Ticket Retrieval & Priority Prediction System",
     description=(
-        "A full-stack support ticketing platform with role-based access, "
-        "ticket lifecycle management, and AI-assisted reply suggestions."
+        "A production-grade ticketing platform featuring an offline-capable, "
+        "CPU-optimized semantic retrieval engine and weighted k-NN priority prediction system."
     ),
     version="1.0.0",
     docs_url="/docs",
@@ -108,7 +108,7 @@ app.include_router(similar_tickets.router)
 @app.get("/", tags=["Root"])
 def root():
     return {
-        "message": "Customer Support Ticket System API",
+        "message": "Semantic Ticket Retrieval & Priority Prediction API",
         "docs": "/docs",
         "version": "1.0.0",
     }
