@@ -14,3 +14,16 @@ httpx>=0.25.0
 # Optimization: add faiss-cpu>=1.7.4 for O(log n) ANN at 10k+ tickets
 fastembed>=0.2.0
 numpy>=1.24.0
+# ── Phase 2: Qdrant in-process vector DB ────────────────────────────────────
+qdrant-client[local]>=1.9.0
+# ── Phase 3: LangChain LLM chain abstraction (Groq — free, no credit card) ──
+langchain>=0.3.0
+langchain-openai>=0.3.0
+langchain-groq>=0.2.0
+# ── Phase 4: Embedding fine-tuning (scripts/finetune_embeddings.py) ─────────
+sentence-transformers>=2.2.0
+datasets>=2.0.0
+accelerate>=1.1.0
+# ── Phase 5: DistilBERT priority classifier (scripts/train_priority_classifier.py)
+transformers>=4.35.0
+torch>=2.0.0

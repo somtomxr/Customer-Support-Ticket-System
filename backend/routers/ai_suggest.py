@@ -7,6 +7,7 @@ from database import get_db
 from models import User, Ticket, Comment
 from schemas import AISuggestRequest, AISuggestResponse
 from auth import get_current_user, require_role
+import similarity_engine
 
 router = APIRouter(prefix="/api/ai", tags=["AI Suggestions"])
 
@@ -34,20 +35,69 @@ REPLY_TEMPLATES = {
     ],
 }
 
+# LLM model config
+# Priority: GROQ_API_KEY → OPENAI_API_KEY → template fallback
+GROQ_MODEL   = "llama-3.3-70b-versatile"   # free, high quality
+OPENAI_MODEL = "gpt-3.5-turbo"              # fallback if OpenAI key provided
+
 
 def _get_template_suggestion(ticket: Ticket) -> str:
     """Generate a reply suggestion using templates based on ticket context."""
     category_name = ticket.category.name.lower() if ticket.category else "general"
-
-    # Map category to template group
     template_key = "general"
     for key in REPLY_TEMPLATES:
         if key in category_name:
             template_key = key
             break
+    return random.choice(REPLY_TEMPLATES[template_key])
 
-    templates = REPLY_TEMPLATES[template_key]
-    return random.choice(templates)
+
+def _build_rag_context(ticket: Ticket, db: Session) -> str:
+    """
+    Phase 1: Retrieve top-3 semantically similar *resolved* tickets and
+    extract their last comment to build a RAG context block.
+    Returns an empty string when no resolved neighbours are found.
+    """
+    if not similarity_engine.is_available():
+        return ""
+
+    all_tickets = db.query(Ticket).all()
+    similar = similarity_engine.find_similar(
+        query_ticket=ticket, all_tickets=all_tickets, db=db, top_k=3,
+    )
+
+    resolved_matches = [(t, s) for t, s in similar if t.status == "resolved"]
+    if not resolved_matches:
+        return ""
+
+    context_parts: list[str] = []
+    for past_ticket, _score in resolved_matches:
+        last_comment = (
+            db.query(Comment)
+            .filter(Comment.ticket_id == past_ticket.id)
+            .order_by(Comment.created_at.desc())
+            .first()
+        )
+        resolution_text = last_comment.content if last_comment else "(no comment recorded)"
+        context_parts.append(
+            f"Past resolution: {past_ticket.title} — {past_ticket.description} "
+            f"— Resolution: {resolution_text}"
+        )
+    return "\n\n".join(context_parts)
+
+
+def _build_llm_chain(groq_key: str, openai_key: str):
+    """
+    Return a (llm, provider_name) tuple.
+    Priority: Groq (free) → OpenAI → None
+    """
+    if groq_key:
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=GROQ_MODEL, api_key=groq_key, max_tokens=300), "groq"
+    if openai_key:
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=OPENAI_MODEL, api_key=openai_key, max_tokens=300, temperature=0.7), "openai"
+    return None, None
 
 
 @router.post("/suggest-reply", response_model=AISuggestResponse)
@@ -58,7 +108,16 @@ def suggest_reply(
 ):
     """
     Generate an AI-assisted reply suggestion for a ticket.
-    Uses template-based approach by default, or OpenAI if API key is configured.
+
+    LLM priority:
+      1. Groq   (GROQ_API_KEY)   — free, fast, Llama 3.3 70B
+      2. OpenAI (OPENAI_API_KEY) — fallback if Groq key not set
+      3. Template                — no LLM key configured, or LLM call fails
+
+    method field in response:
+      "rag"      — LLM call enriched with resolved-ticket context (RAG)
+      "llm_only" — LLM call with no resolved neighbours found
+      "template" — hardcoded template fallback
     """
     ticket = (
         db.query(Ticket)
@@ -69,49 +128,66 @@ def suggest_reply(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
+    groq_key   = os.getenv("GROQ_API_KEY", "").strip()
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
 
-    if openai_key:
-        # Use OpenAI for smarter suggestions
+    llm, provider = _build_llm_chain(groq_key, openai_key)
+
+    if llm is not None:
+        # ── Phase 1: RAG context from resolved similar tickets ────────────────
+        rag_context = _build_rag_context(ticket, db)
+
         try:
-            import httpx
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
 
-            comments_text = "\n".join(
-                [f"- {c.content}" for c in ticket.comments[-5:]]
-            )
-            prompt = (
-                f"You are a helpful customer support agent. Generate a professional, "
-                f"empathetic reply for this support ticket.\n\n"
-                f"Ticket Title: {ticket.title}\n"
-                f"Ticket Description: {ticket.description}\n"
-                f"Category: {ticket.category.name if ticket.category else 'General'}\n"
-                f"Priority: {ticket.priority}\n"
-                f"Recent Comments:\n{comments_text}\n\n"
-                f"Generate a helpful reply (2-3 paragraphs):"
+            comments_text = "\n".join([f"- {c.content}" for c in ticket.comments[-5:]])
+
+            if rag_context:
+                system_msg = (
+                    "You are a helpful customer support agent. "
+                    "Use the following past resolutions as reference when drafting your reply:\n\n"
+                    "{rag_context}\n\n"
+                    "Now generate a professional, empathetic reply for the current ticket."
+                )
+            else:
+                system_msg = (
+                    "You are a helpful customer support agent. "
+                    "Generate a professional, empathetic reply for this support ticket."
+                )
+
+            human_msg = (
+                "Ticket Title: {title}\n"
+                "Ticket Description: {description}\n"
+                "Category: {category}\n"
+                "Priority: {priority}\n"
+                "Recent Comments:\n{comments}\n\n"
+                "Generate a helpful reply (2-3 paragraphs):"
             )
 
-            response = httpx.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "gpt-3.5-turbo",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 300,
-                    "temperature": 0.7,
-                },
-                timeout=15.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            suggestion = data["choices"][0]["message"]["content"].strip()
-            return AISuggestResponse(suggestion=suggestion, method="ai")
+            # ── Phase 3: LangChain chain ──────────────────────────────────────
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_msg),
+                ("human", human_msg),
+            ])
+            chain = prompt | llm | StrOutputParser()
+
+            suggestion = chain.invoke({
+                "rag_context": rag_context,
+                "title": ticket.title,
+                "description": ticket.description,
+                "category": ticket.category.name if ticket.category else "General",
+                "priority": ticket.priority,
+                "comments": comments_text,
+            })
+
+            method = "rag" if rag_context else "llm_only"
+            return AISuggestResponse(suggestion=suggestion.strip(), method=method)
+
         except Exception:
-            # Fallback to templates if AI fails
+            # Fall through to template on any LLM error
             pass
 
-    # Template-based fallback
+    # Template-based fallback (original behaviour, always works)
     suggestion = _get_template_suggestion(ticket)
     return AISuggestResponse(suggestion=suggestion, method="template")

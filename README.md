@@ -1,12 +1,17 @@
 # Semantic Ticket Retrieval & Priority Prediction System
 
-A production-grade, full-stack customer support ticketing platform featuring an offline-capable, CPU-optimized semantic retrieval engine and weighted $k$-NN priority prediction system. Built with **FastAPI**, **React**, and **ONNX-optimized sentence embeddings** for high performance under memory-constrained environments.
+A production-grade, full-stack AI-powered customer support ticketing platform featuring
+semantic retrieval, RAG-based reply generation, and a fine-tuned DistilBERT priority
+classifier — all running locally for free.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?logo=fastapi)
-![SQLite](https://img.shields.io/badge/Database-SQLite%20%7C%20PostgreSQL-4169E1?logo=postgresql)
-![ML](https://img.shields.io/badge/ML-fastembed%20%7C%20ONNX-orange?logo=onnx)
+![Qdrant](https://img.shields.io/badge/Vector_DB-Qdrant-red?logo=qdrant)
+![LangChain](https://img.shields.io/badge/LangChain-LCEL-1C3C3C?logo=langchain)
+![Groq](https://img.shields.io/badge/LLM-Groq_Llama_3.3_70B-orange)
+![HuggingFace](https://img.shields.io/badge/🤗_HuggingFace-DistilBERT-yellow)
+![SQLite](https://img.shields.io/badge/Database-SQLite-4169E1?logo=sqlite)
 
 ---
 
@@ -17,182 +22,92 @@ A production-grade, full-stack customer support ticketing platform featuring an 
 | **Role-Based Access** | Customer and Agent dashboards with distinct capabilities |
 | **Ticket Lifecycle** | Open → In Progress → Resolved with status transition validation |
 | **JWT Authentication** | Secure login with bcrypt password hashing |
-| **12+ REST Endpoints** | Full CRUD with Swagger docs at `/docs` |
-| **AI Reply Suggestions** | Template-based + optional OpenAI-powered agent replies |
-| **Search & Filtering** | Filter by status, priority, category |
+| **REST API** | Full CRUD with Swagger docs at `/docs` |
+| **🔍 Semantic Search** | Qdrant vector DB + fine-tuned MiniLM finds tickets by *meaning*, not keywords |
+| **🤖 RAG Reply Suggestions** | Retrieves resolved similar tickets → feeds to Llama 3.3 70B → generates contextual reply |
+| **🧠 Priority Classifier** | DistilBERT fine-tuned on 1,071 tickets — **94% accuracy** — returns softmax confidence |
+| **🔗 LangChain LCEL** | `ChatPromptTemplate \| ChatGroq \| StrOutputParser` pipeline |
+| **💬 LLM-Assisted Labelling** | Groq auto-labels unlabelled tickets for classifier training |
+| **⚡ Free LLM** | Groq (Llama 3.3 70B) — 14,400 req/day free, no credit card |
 | **Comment System** | Threaded comments with author attribution |
-| **🧠 Semantic Similar Tickets** | ML-powered: finds past tickets with the same *meaning*, not just keywords |
-| **🤖 Priority Prediction** | Weighted k-NN vote on similar tickets → suggests priority automatically |
 
 ---
 
-## 🧠 ML Feature: Semantic Similar Ticket Search
-
-### How it works
+## ML Architecture
 
 ```
-New Ticket Text
-      │
-      ▼
-fastembed (all-MiniLM-L6-v2 via ONNX)  ← ~100MB runtime, runs offline, no API key
-      │  encodes title + description → 384-dimensional float32 vector
-      ▼
-cosine_similarity(new_vec, all_ticket_vecs)   ← NumPy dot product
-      │  similarity ∈ [0, 1]
-      ▼
-Top-K most similar tickets  +  weighted k-NN priority prediction
+Ticket text
+    │
+    ▼ fastembed (MiniLM-L6-v2, ONNX, fine-tuned)
+Embedding vector (384-dim)
+    │
+    ├──▶ Qdrant HNSW index ──▶ Top-5 similar tickets
+    │         │
+    │         └──▶ Resolved tickets ──▶ RAG context
+    │                                       │
+    │                              LangChain LCEL chain
+    │                              ChatPromptTemplate
+    │                                       │
+    │                              Groq (Llama 3.3 70B)
+    │                                       │
+    │                              Contextual reply ◀──────────┐
+    │                                                           │
+    └──▶ DistilBERT classifier ──▶ Priority + confidence score─┘
 ```
 
-### Why this matters (vs keyword search)
-
-| Query | Keyword Search | Semantic Search |
-|---|---|---|
-| "can't login" vs "invalid credentials" | ❌ 0 match | ✅ High similarity |
-| "payment declined" vs "card rejected" | ❌ 0 match | ✅ High similarity |
-| "app is slow" vs "page takes forever" | ❌ 0 match | ✅ High similarity |
-
-### Implementation details
-
-- **Model & Runtime**: `all-MiniLM-L6-v2` via `fastembed` — generates 384-dimensional dense vector embeddings. Running under **ONNX Runtime** to cut inference memory footprint by **84% (500MB → 80MB)**, enabling seamless deployment on CPU-only, memory-constrained environments (like Render's 512MB free tier).
-- **Search**: Brute-force NumPy cosine similarity — executes in **<20ms** for 1,000-ticket pools, offering an efficient $O(n)$ search suitable for typical small-to-medium datasets.
-- **Priority Prediction**: A weighted $k$-NN classifier using squared-cosine similarity weighting ($k=5$) to auto-suggest ticket priority with zero labeled training data.
-- **Caching**: 3-level caching strategy:
-  - L1: In-memory Python dict (instantaneous lookup)
-  - L2: SQLite/PostgreSQL `BLOB` column (survives app restarts with zero additional infrastructure)
-  - L3: On-demand generation → persists to L1 & L2
-- **Cache Coherence**: Automatic cache invalidation (`invalidate(ticket_id)`) on ticket creation, update, or category shifts.
-- **Security & RBAC**: Customers are restricted to searching within their own tickets, while Agents can search and retrieve across all tickets.
-- **Scalability Path**: Designed to easily swap the NumPy similarity engine for **FAISS** (for $O(\log n)$ approximate nearest neighbors at scale) and the in-memory dict for **Redis** in multi-worker environments.
-
-### Key files
-
-| File | Purpose |
-|---|---|
-| `backend/similarity_engine.py` | Singleton model, 3-level cache, `find_similar()`, `suggest_priority()` |
-| `backend/routers/similar_tickets.py` | `GET /api/tickets/{id}/similar?top_k=5` |
-| `frontend/src/components/SimilarTickets.jsx` | Panel with score bars, priority badge, shimmer skeleton |
-| `frontend/src/services/similarityService.js` | API wrapper |
-
----
-
-## 📊 Model Evaluation & Tuning
-
-To evaluate our priority suggestion accuracy, we built a comprehensive Jupyter evaluation notebook: [backend/evaluation.ipynb](file:///Users/somtomar/WORK/customer-support-ticket-system/backend/evaluation.ipynb).
-
-### 📈 Evaluation Results (k=5)
-
-| Model | Accuracy | Weighted F1 | Notes |
-|---|---|---|---|
-| **Majority-Class Baseline** | 39.1% | 0.220 | Always predicts `medium` |
-| **Semantic k-NN (all-MiniLM-L6-v2, ONNX)** | **69.6%** ✅ | **0.687** ✅ | **+78% improvement** over baseline · avg confidence 67.9% |
-
-*Test set: 23 tickets (stratified 20% holdout from 120 synthetic tickets). Training set: 97 tickets. Seed: 42.*
-
-### ⚙️ Hyperparameter Tuning (k Sweep)
-
-To find the optimal number of neighbors ($k$), we swept $k=1$ through $10$ in the notebook. $k=5$ yields the highest accuracy before neighborhood pollution from the majority class (`medium`) sets in:
-
-![k-NN Tuning Sweep](backend/k_tuning_results.png)
-
-* **Low k (1-2)**: Susceptible to local noise and outlier tickets.
-* **Optimal k (5)**: Capture semantic clusters accurately without neighborhood pollution.
-* **High k (6-10)**: Neighbor quality degrades, bringing in unrelated tickets from the majority class (`medium`), pushing performance back toward the baseline.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full component diagram.
 
 ---
 
 ## Tech Stack
 
+### Backend
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, Vite, Tailwind CSS, React Router, Axios |
-| Backend | Python, FastAPI, SQLAlchemy ORM, Pydantic |
-| Database | SQLite (dev) / PostgreSQL (prod) |
-| Auth | JWT (python-jose), bcrypt (passlib) |
-| ML | fastembed, ONNX Runtime, NumPy |
-| Deployment | Vercel (frontend), Render (backend) |
+| API Framework | FastAPI + Uvicorn |
+| Database | SQLite (SQLAlchemy ORM) |
+| Auth | JWT + bcrypt |
+| Embeddings | fastembed (MiniLM-L6-v2, ONNX — no GPU required) |
+| Vector DB | Qdrant (in-memory, upgradeable to remote) |
+| LLM Chain | LangChain LCEL (`langchain-groq` + `langchain-openai`) |
+| Primary LLM | Groq — Llama 3.3 70B (free) |
+| Priority Model | DistilBERT (HuggingFace Transformers, Trainer API) |
+| ML Training | sentence-transformers, HuggingFace datasets, accelerate |
+
+### Frontend
+| Layer | Technology |
+|---|---|
+| Framework | React 18 + Vite |
+| Routing | React Router |
+| HTTP | Axios |
+| Styling | CSS Modules |
 
 ---
 
-## Project Structure
-
-```
-customer-support-ticket-system/
-├── backend/
-│   ├── main.py                    # FastAPI app + router registration
-│   ├── database.py                # DB connection & session
-│   ├── models.py                  # SQLAlchemy models (User, Ticket, Comment, Category)
-│   │                              # Ticket.embedding: BLOB column for persisted vectors
-│   ├── schemas.py                 # Pydantic schemas incl. SimilarTicketOut
-│   ├── auth.py                    # JWT utilities
-│   ├── similarity_engine.py       # ← ML core: embeddings, cosine sim, priority vote
-│   ├── seed.py                    # Basic seed (6 tickets)
-│   ├── rich_seed.py               # Rich seed: 120 tickets across 6 semantic clusters
-│   ├── requirements.txt
-│   ├── .env.example
-│   └── routers/
-│       ├── auth_routes.py
-│       ├── tickets.py             # CRUD + cache invalidation on create/update
-│       ├── comments.py
-│       ├── categories.py
-│       ├── users.py
-│       ├── ai_suggest.py          # Template + OpenAI reply suggestions
-│       └── similar_tickets.py     # ← GET /api/tickets/{id}/similar
-├── frontend/
-│   └── src/
-│       ├── App.jsx
-│       ├── context/               # AuthContext
-│       ├── services/
-│       │   ├── api.js             # Axios client
-│       │   └── similarityService.js  # ← getSimilarTickets()
-│       ├── components/
-│       │   ├── Badges.jsx
-│       │   └── SimilarTickets.jsx    # ← ML panel with score bars + priority badge
-│       └── pages/
-│           ├── Dashboard.jsx
-│           ├── TicketDetail.jsx   # 3-column layout: main | details | similar
-│           ├── CreateTicket.jsx
-│           ├── Login.jsx
-│           └── Register.jsx
-└── README.md
-```
-
----
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
+- A free [Groq API key](https://console.groq.com) (takes 2 minutes)
 
 ### Backend Setup
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate      # macOS/Linux
-# venv\Scripts\activate       # Windows
-
-# Install dependencies (includes fastembed and other requirements)
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Configure environment
 cp .env.example .env
+# Edit .env and add your GROQ_API_KEY=gsk_...
 
-# Seed with 120 realistic tickets across 6 semantic clusters (recommended)
-python rich_seed.py
-
-# OR minimal seed (6 tickets)
-# python seed.py
-
-# Start the server
-uvicorn main:app --reload --port 8000
+python seed.py                    # seed initial data
+uvicorn main:app --reload
 ```
 
-> **First ML request**: The fastembed model (all-MiniLM-L6-v2 ONNX weights, ~100MB) is downloaded and cached locally on the first `/similar` request. Subsequent requests are extremely fast (<20ms).
-
-API docs: http://localhost:8000/docs
+API available at: `http://localhost:8000`
+Swagger docs: `http://localhost:8000/docs`
 
 ### Frontend Setup
 
@@ -202,123 +117,139 @@ npm install
 npm run dev
 ```
 
-Frontend: http://localhost:5173
+App available at: `http://localhost:5173`
 
-### Demo Accounts
+---
+
+## Demo Credentials
 
 | Role | Email | Password |
 |---|---|---|
-| Agent | som@support.com | password123 |
-| Agent | neha@support.com | password123 |
-| Customer | rahul@example.com | password123 |
-| Customer | priya@example.com | password123 |
-| Customer | amit@example.com | password123 |
-| Customer | sneha@example.com | password123 |
-| Customer | vikram@example.com | password123 |
+| Agent | `agent@support.com` | `password123` |
+| Customer | `customer@example.com` | `password123` |
 
 ---
 
 ## API Endpoints
 
-| Method | Endpoint | Description | Auth |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/login` | JWT login |
+| GET | `/api/tickets` | List tickets (filtered) |
+| POST | `/api/tickets` | Create ticket |
+| PATCH | `/api/tickets/{id}` | Update ticket |
+| GET | `/api/similar-tickets/{id}` | Semantic similar + priority prediction |
+| POST | `/api/ai/suggest-reply/{id}` | RAG reply suggestion (Groq) |
+| GET | `/api/categories` | List categories |
+| GET | `/api/comments/{ticket_id}` | Ticket comments |
+| POST | `/api/comments/{ticket_id}` | Add comment |
+| GET | `/api/users/me` | Current user profile |
+| GET | `/api/stats` | Dashboard statistics |
+
+---
+
+## ML Training Scripts
+
+These are one-time scripts to improve model quality. Run after the server is set up.
+
+### Phase 4 — Fine-tune Embedding Model
+```bash
+cd backend
+source venv/bin/activate
+python scripts/finetune_embeddings.py
+# Saves to: backend/models/ticket-minilm-finetuned/
+# Then add to .env: EMBEDDING_MODEL_PATH=./models/ticket-minilm-finetuned
+```
+
+### Phase 5 — Train Priority Classifier
+```bash
+cd backend
+source venv/bin/activate
+python scripts/train_priority_classifier.py
+# Saves to: backend/models/priority-distilbert/
+# Server auto-detects on next restart — no config needed
+```
+
+**Results with 1,071 training tickets:**
+
+```
+              precision    recall  f1-score   support
+         low       0.95      0.99      0.97        70
+      medium       0.91      0.92      0.92        79
+      urgent       0.97      0.91      0.94        66
+    accuracy                           0.94       215
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
 |---|---|---|---|
-| POST | `/api/auth/register` | Register new user | No |
-| POST | `/api/auth/login` | Login & get JWT | No |
-| GET | `/api/auth/me` | Current user profile | Yes |
-| GET | `/api/tickets/` | List tickets | Yes |
-| POST | `/api/tickets/` | Create ticket | Yes |
-| GET | `/api/tickets/{id}` | Ticket details + comments | Yes |
-| PUT | `/api/tickets/{id}` | Update ticket | Yes |
-| PATCH | `/api/tickets/{id}/status` | Change status | Yes |
-| PATCH | `/api/tickets/{id}/assign` | Assign to agent | Agent |
-| GET | `/api/tickets/stats` | Dashboard stats | Yes |
-| **GET** | **`/api/tickets/{id}/similar`** | **Semantic similar tickets + priority prediction** | **Yes** |
-| POST | `/api/tickets/{id}/comments` | Add comment | Yes |
-| GET | `/api/categories/` | List categories | No |
-| POST | `/api/ai/suggest-reply` | AI reply suggestion | Agent |
+| `DATABASE_URL` | ✅ | — | SQLite: `sqlite:///./support_tickets.db` |
+| `SECRET_KEY` | ✅ | — | JWT signing secret |
+| `ALGORITHM` | ✅ | `HS256` | JWT algorithm |
+| `FRONTEND_URL` | ✅ | `http://localhost:5173` | CORS origin |
+| `GROQ_API_KEY` | ⭐ | — | Free at console.groq.com |
+| `OPENAI_API_KEY` | Optional | — | Fallback if Groq unavailable |
+| `QDRANT_URL` | Optional | in-memory | Remote Qdrant URL |
+| `EMBEDDING_MODEL_PATH` | Optional | MiniLM default | Path to fine-tuned embeddings |
 
-### Similar Tickets Endpoint
+---
+
+## Project Structure
 
 ```
-GET /api/tickets/{id}/similar?top_k=5
-Authorization: Bearer <token>
-
-Response:
-{
-  "results": [
-    {
-      "id": 12,
-      "title": "Account locked after too many login attempts",
-      "status": "resolved",
-      "priority": "urgent",
-      "similarity_score": 0.607,
-      "customer_name": "Rahul Sharma",
-      "created_at": "2026-06-01T10:23:00"
-    }
-  ],
-  "method": "semantic",
-  "suggested_priority": "high",
-  "priority_confidence": 0.62
-}
+customer-support-ticket-system/
+├── backend/
+│   ├── main.py                    # FastAPI app entry point
+│   ├── similarity_engine.py       # Qdrant + embeddings + DistilBERT
+│   ├── models.py                  # SQLAlchemy models
+│   ├── schemas.py                 # Pydantic schemas
+│   ├── auth.py                    # JWT authentication
+│   ├── database.py                # DB session setup
+│   ├── routers/
+│   │   ├── ai_suggest.py          # RAG + LangChain + Groq
+│   │   ├── similar_tickets.py     # Semantic search endpoint
+│   │   ├── tickets.py             # Ticket CRUD
+│   │   ├── comments.py            # Comments
+│   │   ├── auth_routes.py         # Login/register
+│   │   ├── categories.py          # Categories
+│   │   └── users.py               # User profile
+│   ├── scripts/
+│   │   ├── finetune_embeddings.py       # Phase 4: fine-tune MiniLM
+│   │   ├── train_priority_classifier.py  # Phase 5: train DistilBERT
+│   │   └── import_synthetic_tickets.py  # Import generated ticket data
+│   ├── seed.py                    # Initial data seeder
+│   ├── rich_seed.py               # Extended seeder (121 tickets)
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       ├── components/
+│       └── ...
+├── ARCHITECTURE.md                # System architecture + diagrams
+├── CHANGELOG.md                   # Version history
+├── README.md                      # This file
+├── render.yaml                    # Render deployment config
+└── vercel.json                    # Vercel frontend config
 ```
 
 ---
 
-## Database Schema
+## What's New in v2.0
 
-```
-users              tickets                    comments         categories
-─────────          ──────────────────────     ──────────       ──────────
-id (PK)            id (PK)                    id (PK)          id (PK)
-name               title                      content          name
-email (UQ)         description                ticket_id (FK)   description
-password_hash      status                     user_id (FK)
-role               priority                   is_ai_generated
-is_active          customer_id (FK)           created_at
-created_at         agent_id (FK)
-                   category_id (FK)
-                   created_at
-                   updated_at
-                   embedding (BLOB) ← 384-dim float32 vector, 1.5KB/ticket
-```
+| | v1.0 | v2.0 |
+|---|---|---|
+| Vector search | NumPy O(n) loop | Qdrant HNSW index |
+| AI replies | Static template dict | RAG + Llama 3.3 70B |
+| Priority | k-NN vote | DistilBERT (**94% accuracy**) |
+| LLM cost | Paid (OpenAI) | **Free (Groq)** |
+| Tickets in DB | 121 | 1,071 |
+| LLM framework | Raw httpx | LangChain LCEL |
 
----
-
-## Deployment
-
-### Frontend → Vercel
-1. Push to GitHub
-2. Import in Vercel → Build: `npm run build`, Output: `dist`
-3. Set env: `VITE_API_URL=https://your-backend.onrender.com`
-
-### Backend → Render
-1. Push to GitHub
-2. New Web Service → Build: `pip install -r requirements.txt`
-3. Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Add env vars from `.env.example`
-
-> **Render Free Tier Compatibility**: Swapped out `sentence-transformers` and heavy PyTorch (~800MB memory footprint) for `fastembed` (ONNX Runtime, ~150MB memory footprint). This allows the backend API to run comfortably within the 512MB RAM limit on Render's free tier. No heavy PyTorch installation required!
-
----
-
-## Technical Architecture FAQ
-
-Key design details and implementation notes:
-
-**Q: What is an embedding?**
-> A dense numerical vector (384 floats here) that represents the semantic meaning of text. Two texts with similar meaning have embeddings that point in nearly the same direction in vector space.
-
-**Q: Why cosine similarity and not Euclidean distance?**
-> Cosine similarity measures the angle between vectors, making it length-invariant. A short tweet and a long paragraph about the same topic will have similar cosine similarity even though their vector magnitudes differ.
-
-**Q: How does k-NN priority prediction work without training?**
-> We reuse the similarity scores as vote weights. The top-k most similar tickets each vote for their own priority, weighted by their cosine similarity score. The priority with the highest total weight wins. No labels, no training pipeline, improves automatically as more tickets are added.
-
-**Q: Why not TF-IDF + XGBoost?**
-> TF-IDF is bag-of-words — "can't login" and "invalid credentials" share zero tokens, so similarity = 0. Sentence-transformers encode semantic meaning, so they score high similarity correctly. XGBoost also requires labeled training data and a separate training pipeline, while our approach works on day one.
-
-**Q: How would you scale this to millions of tickets?**
-> Replace the NumPy brute-force O(n) loop with a FAISS IndexFlatIP for approximate nearest neighbours at O(log n). Replace the in-memory Python dict cache with Redis HSET for multi-worker deployments. The `similarity_engine.py` interface is already designed for this swap.
+See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
 
 ---
 

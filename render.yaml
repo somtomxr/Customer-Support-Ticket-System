@@ -18,3 +18,14 @@ services:
         value: 60
       - key: FRONTEND_URL
         value: https://semantic-ticket-retrieval-and-priority-prediction.vercel.app
+      # ── AI / LLM ──────────────────────────────────────────────────────────────
+      - key: GROQ_API_KEY
+        sync: false          # Set this manually in Render dashboard (never store in git)
+      - key: OPENAI_API_KEY
+        sync: false          # Optional fallback — leave blank if using Groq only
+      # ── ML Model ──────────────────────────────────────────────────────────────
+      - key: HF_MODEL_ID
+        value: somtomxr/ticket-priority-distilbert   # Loads DistilBERT (94% accuracy) from HuggingFace Hub
+      # ── Vector DB ─────────────────────────────────────────────────────────────
+      - key: QDRANT_URL
+        value: ""            # Leave empty = in-memory Qdrant (resets on restart, fine for free tier)

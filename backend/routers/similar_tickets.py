@@ -79,7 +79,10 @@ def get_similar_tickets(
     ]
 
     # Weighted k-NN priority vote — free, reuses already-computed similar list
-    suggested_priority, priority_confidence = similarity_engine.suggest_priority(similar)
+    # Passes query_ticket so Phase 5 DistilBERT classifier can use ticket text
+    suggested_priority, priority_confidence = similarity_engine.suggest_priority(
+        similar, ticket=query_ticket
+    )
 
     return SimilarTicketsResponse(
         results=results,

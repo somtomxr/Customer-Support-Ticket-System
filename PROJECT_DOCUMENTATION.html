@@ -98,10 +98,14 @@
             <span class="tag">Full-Stack Web App</span>
             <span class="tag">React.js</span>
             <span class="tag">FastAPI</span>
-            <span class="tag">PostgreSQL / SQLite</span>
+            <span class="tag">SQLite</span>
+            <span class="tag">Qdrant Vector DB</span>
+            <span class="tag">LangChain LCEL</span>
+            <span class="tag">Groq · Llama 3.3 70B</span>
+            <span class="tag">DistilBERT · 94% accuracy</span>
+            <span class="tag">RAG Pipeline</span>
             <span class="tag">JWT Auth</span>
-            <span class="tag">REST API</span>
-            <span class="tag">AI Integration</span>
+            <span class="tag">v2.0</span>
         </div>
     </div>
 </div>
@@ -149,8 +153,11 @@
         <li>Complete ticket lifecycle: <code>Open → In Progress → Resolved</code> with transition validation</li>
         <li>JWT-based authentication with bcrypt password hashing</li>
         <li>16+ RESTful API endpoints with auto-generated Swagger documentation</li>
-        <li>AI-powered reply suggestions (template-based + optional OpenAI integration)</li>
-        <li>Category system, priority levels, search & filtering</li>
+        <li><strong>RAG-powered AI reply suggestions</strong> — Groq (Llama 3.3 70B) grounded in past resolved tickets</li>
+        <li><strong>Qdrant vector DB</strong> — semantic similar ticket search (meaning, not keywords)</li>
+        <li><strong>DistilBERT priority classifier</strong> — 94% accuracy, returns softmax confidence score</li>
+        <li><strong>LangChain LCEL</strong> — <code>ChatPromptTemplate | ChatGroq | StrOutputParser</code> chain</li>
+        <li>Category system, priority levels, search &amp; filtering</li>
         <li>Responsive SPA frontend with modern UI/UX</li>
     </ul>
     
@@ -248,11 +255,6 @@
                 <td>10-50x faster than Webpack for development. Hot Module Replacement (HMR) makes iteration instant.</td>
             </tr>
             <tr>
-                <td><strong>Tailwind CSS</strong></td>
-                <td>Styling</td>
-                <td>Utility-first CSS framework. Faster to build responsive UIs than writing custom CSS. Tree-shaking removes unused styles in production.</td>
-            </tr>
-            <tr>
                 <td><strong>FastAPI</strong></td>
                 <td>Backend framework</td>
                 <td>Async-capable Python framework with automatic Swagger UI, Pydantic validation, and type hints. Faster than Flask for modern APIs.</td>
@@ -263,9 +265,29 @@
                 <td>Python's most mature ORM. Supports both SQLite and PostgreSQL without code changes. Relationship loading (joinedload) prevents N+1 queries.</td>
             </tr>
             <tr>
-                <td><strong>SQLite / PostgreSQL</strong></td>
-                <td>Database</td>
-                <td>SQLite for zero-config development; PostgreSQL for production. Schema is the same — just change the connection string.</td>
+                <td><strong>Qdrant</strong></td>
+                <td>Vector Database</td>
+                <td>Rust-based vector DB. Chosen over FAISS (no metadata filtering) and ChromaDB (not production-ready). Runs in-memory for dev, upgrades to remote with one env var change.</td>
+            </tr>
+            <tr>
+                <td><strong>fastembed (MiniLM-L6-v2)</strong></td>
+                <td>Embeddings</td>
+                <td>ONNX-optimized — no GPU required. Fine-tuned on domain ticket data for higher similarity accuracy. 384-dimensional vectors.</td>
+            </tr>
+            <tr>
+                <td><strong>LangChain LCEL</strong></td>
+                <td>LLM orchestration</td>
+                <td>Composable chain: <code>ChatPromptTemplate | ChatGroq | StrOutputParser</code>. Handles Groq primary + OpenAI fallback cleanly.</td>
+            </tr>
+            <tr>
+                <td><strong>Groq (Llama 3.3 70B)</strong></td>
+                <td>LLM</td>
+                <td>Free tier: 14,400 req/day, no credit card. Outperforms GPT-3.5-turbo. Used for RAG replies and LLM-assisted data labelling.</td>
+            </tr>
+            <tr>
+                <td><strong>DistilBERT (HuggingFace)</strong></td>
+                <td>Priority Classifier</td>
+                <td>Fine-tuned on 1,071 tickets using Trainer API. 94% accuracy (low/medium/urgent). Returns softmax confidence score per prediction.</td>
             </tr>
             <tr>
                 <td><strong>JWT (python-jose)</strong></td>
@@ -470,26 +492,56 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
 
 <!-- ═══════════════════════════════════ SECTION 8: AI ═══════════════════════════════════ -->
 <section id="ai">
-    <h2>8. AI Reply Suggestion Engine</h2>
-    
-    <p>The AI suggestion feature helps agents draft replies faster. I implemented a <strong>dual-approach system</strong>:</p>
-    
-    <h3>Approach 1: Template-Based (Default)</h3>
-    <p>Works out-of-the-box without any API keys. Templates are categorized by ticket category (billing, technical, account, general) and randomized to avoid repetition.</p>
-    <pre><code>REPLY_TEMPLATES = {
-    "billing": ["Thank you for reaching out about your billing concern...", ...],
-    "technical": ["Thank you for reporting this technical issue...", ...],
-    "account": ["I understand you're having trouble with your account...", ...],
-    "general": ["Thank you for contacting our support team...", ...],
-}</code></pre>
+    <h2>8. AI Intelligence Stack (v2.0)</h2>
 
-    <h3>Approach 2: OpenAI Integration (Optional)</h3>
-    <p>If an <code>OPENAI_API_KEY</code> is configured, the system constructs a context-aware prompt including the ticket title, description, category, priority, and recent comments, then sends it to GPT-3.5-turbo for a tailored response.</p>
-    
-    <div class="callout callout-warning">
-        <strong>Graceful Fallback</strong>
-        If the OpenAI API fails (rate limit, network error, invalid key), the system silently falls back to template-based suggestions. The user always gets a response.
+    <p>The AI layer was completely rebuilt in v2.0. It now implements a full <strong>RAG (Retrieval-Augmented Generation)</strong> pipeline backed by a fine-tuned vector search engine and a DistilBERT priority classifier.</p>
+
+    <h3>Layer 1 — Qdrant Semantic Search</h3>
+    <p>When a ticket arrives, its text is embedded using a fine-tuned MiniLM model and stored in Qdrant. The similar-ticket endpoint queries Qdrant using HNSW cosine search — finding tickets by <em>meaning</em>, not keywords.</p>
+    <pre><code># similarity_engine.py
+results = client.query_points(
+    collection_name="tickets",
+    query=embedding_vector,
+    query_filter=Filter(must=[FieldCondition(key="status", match=MatchValue(value="resolved"))]),
+    limit=3,
+)
+# Returns ScoredPoint objects with payload + similarity score</code></pre>
+
+    <h3>Layer 2 — RAG Reply Generation (LangChain LCEL)</h3>
+    <p>The top resolved similar tickets are used as context. A LangChain LCEL chain passes this context to Groq (Llama 3.3 70B) to generate a contextual, grounded reply.</p>
+    <pre><code># routers/ai_suggest.py
+chain = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful support agent. Use the resolved ticket context below."),
+    ("human", "Context:\n{context}\n\nCurrent ticket: {ticket}\n\nWrite a reply:"),
+]) | ChatGroq(model="llama-3.3-70b-versatile") | StrOutputParser()
+
+reply = chain.invoke({"context": rag_context, "ticket": ticket_text})</code></pre>
+
+    <h3>Layer 3 — DistilBERT Priority Classifier</h3>
+    <p>A fine-tuned <code>distilbert-base-uncased</code> model classifies each ticket as <code>low</code>, <code>medium</code>, or <code>urgent</code>. Trained on 1,071 tickets using the HuggingFace Trainer API with LLM-assisted auto-labelling via Groq.</p>
+    <pre><code># Inference in similarity_engine.py
+logits = model(**inputs).logits
+probs = torch.softmax(logits, dim=-1)
+confidence = float(probs[0].max())      # e.g. 0.97
+label = ID2LABEL[int(probs[0].argmax())]  # e.g. "urgent"</code></pre>
+
+    <h3>Fallback Chain</h3>
+    <div class="callout callout-success">
+        <strong>Always returns a response</strong>
+        The system degrades gracefully: <code>RAG+Groq</code> → <code>LLM only (no context)</code> → <code>Static templates</code>. The <code>method</code> field in the response tells you which path fired.
     </div>
+
+    <h3>Performance Results</h3>
+    <table>
+        <thead><tr><th>Metric</th><th>v1.0</th><th>v2.0</th></tr></thead>
+        <tbody>
+            <tr><td>AI reply quality</td><td>Static template (12 strings)</td><td>RAG + Llama 3.3 70B</td></tr>
+            <tr><td>Priority accuracy</td><td>~40% (k-NN)</td><td><strong>94% (DistilBERT)</strong></td></tr>
+            <tr><td>Vector search</td><td>NumPy O(n) loop</td><td>Qdrant HNSW index</td></tr>
+            <tr><td>LLM cost</td><td>Paid (OpenAI)</td><td><strong>Free (Groq)</strong></td></tr>
+            <tr><td>Training data</td><td>—</td><td>1,071 tickets (121 real + 950 synthetic)</td></tr>
+        </tbody>
+    </table>
 </section>
 
 <!-- ═══════════════════════════════════ SECTION 9: FILES ═══════════════════════════════════ -->
@@ -501,6 +553,7 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
         <thead><tr><th>File</th><th>Lines</th><th>Purpose</th></tr></thead>
         <tbody>
             <tr><td><code>main.py</code></td><td>~40</td><td>FastAPI app initialization, CORS, router registration</td></tr>
+            <tr><td><code>similarity_engine.py</code></td><td>~420</td><td>Qdrant vector store, fastembed MiniLM, DistilBERT classifier, thread-safe lazy loading</td></tr>
             <tr><td><code>database.py</code></td><td>~30</td><td>SQLAlchemy engine/session setup, <code>get_db</code> dependency</td></tr>
             <tr><td><code>models.py</code></td><td>~90</td><td>4 SQLAlchemy models with relationships and indexes</td></tr>
             <tr><td><code>schemas.py</code></td><td>~120</td><td>All Pydantic request/response schemas</td></tr>
@@ -509,7 +562,11 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
             <tr><td><code>routers/tickets.py</code></td><td>~200</td><td>Full ticket CRUD with filtering, status, assignment</td></tr>
             <tr><td><code>routers/comments.py</code></td><td>~70</td><td>List and add comments to tickets</td></tr>
             <tr><td><code>routers/categories.py</code></td><td>~30</td><td>Category CRUD</td></tr>
-            <tr><td><code>routers/ai_suggest.py</code></td><td>~110</td><td>AI suggestion engine (template + OpenAI)</td></tr>
+            <tr><td><code>routers/ai_suggest.py</code></td><td>~260</td><td>RAG pipeline: Qdrant retrieve → LangChain LCEL → Groq (Llama 3.3 70B)</td></tr>
+            <tr><td><code>routers/similar_tickets.py</code></td><td>~110</td><td>Semantic search + DistilBERT priority prediction endpoint</td></tr>
+            <tr><td><code>scripts/finetune_embeddings.py</code></td><td>~300</td><td>Fine-tune MiniLM on ticket pairs (Phase 4)</td></tr>
+            <tr><td><code>scripts/train_priority_classifier.py</code></td><td>~350</td><td>DistilBERT classifier training with Groq auto-labelling (Phase 5)</td></tr>
+            <tr><td><code>scripts/import_synthetic_tickets.py</code></td><td>~90</td><td>Import Claude-generated synthetic tickets to DB</td></tr>
             <tr><td><code>seed.py</code></td><td>~90</td><td>Demo data seeding script</td></tr>
         </tbody>
     </table>
@@ -635,13 +692,22 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
 <section id="future">
     <h2>14. Future Enhancements</h2>
     
+    <h3>✅ Implemented in v2.0</h3>
     <ul>
+        <li><strong>Semantic vector search</strong> (Qdrant) — shipped</li>
+        <li><strong>RAG-powered AI replies</strong> (Groq + LangChain) — shipped</li>
+        <li><strong>Priority classifier</strong> (DistilBERT, 94% accuracy) — shipped</li>
+        <li><strong>Fine-tuned embeddings</strong> (MiniLM domain adaptation) — shipped</li>
+    </ul>
+
+    <h3>🔜 Planned for v3.0</h3>
+    <ul>
+        <li><strong>LangGraph agent</strong>: multi-step agent that searches KB, checks account status, then generates reply</li>
         <li><strong>Email notifications</strong>: Notify customers when ticket status changes</li>
         <li><strong>File attachments</strong>: Upload screenshots/logs with tickets</li>
         <li><strong>Real-time updates</strong>: WebSocket integration for live comment updates</li>
         <li><strong>Analytics dashboard</strong>: Charts for resolution time, ticket volume trends</li>
-        <li><strong>Admin role</strong>: Super admin for managing agents and system settings</li>
-        <li><strong>Knowledge base</strong>: Self-service FAQ to reduce ticket volume</li>
+        <li><strong>Persistent Qdrant</strong>: Switch from in-memory to disk-backed Qdrant instance</li>
         <li><strong>SLA tracking</strong>: Monitor response and resolution time against SLA targets</li>
         <li><strong>Mobile app</strong>: React Native app consuming the same API</li>
     </ul>
@@ -662,9 +728,11 @@ def assign_ticket(..., current_user = Depends(require_role(["agent"]))):
     <div class="qa-block">
         <div class="qa-q">Q: Tell me about this project in 2 minutes.</div>
         <div class="qa-a">
-            <strong>A:</strong> I built a full-stack Customer Support Ticket System — think a simplified version of Zendesk. Customers can log in, create support tickets, and track their status. Support agents get a centralized dashboard where they can see all tickets, assign them to themselves, update their status, and post replies. I also added an AI suggestion feature so agents can generate a draft reply with one click.
+            <strong>A:</strong> I built a full-stack AI-powered Customer Support Ticket System — think a production-grade Zendesk clone with a full ML intelligence layer. Customers log in, create support tickets, and track status. Agents get a centralized dashboard with AI-assisted replies powered by RAG.
             <br><br>
-            Tech stack: React + Tailwind on the frontend (deployed to Vercel), FastAPI + SQLAlchemy on the backend (deployed to Render), and SQLite locally / can use PostgreSQL in production. Authentication is JWT-based with bcrypt password hashing. The whole system has role-based access control — customers and agents see completely different UIs even though it's one app.
+            The v2.0 ML stack has 5 phases: (1) <strong>Qdrant vector database</strong> replaces NumPy brute-force search — semantic similarity, not keyword matching. (2) <strong>RAG pipeline</strong> — when an agent clicks "Suggest Reply", the system finds similar resolved tickets in Qdrant, pulls their resolution comments, and injects that as context into (3) a <strong>LangChain LCEL chain</strong> calling <strong>Groq's Llama 3.3 70B</strong> — completely free. (4) <strong>Fine-tuned MiniLM</strong> for domain-specific embeddings. (5) <strong>DistilBERT classifier</strong> trained on 1,071 tickets (121 real + 950 LLM-generated synthetic data) — <strong>94% accuracy</strong> on priority prediction with softmax confidence scores.
+            <br><br>
+            Tech: React + Vite frontend, FastAPI backend, SQLAlchemy + SQLite, HuggingFace Transformers, LangChain, Qdrant. Deployed on Vercel (frontend) + Render (backend).
         </div>
     </div>
 
